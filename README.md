@@ -26,6 +26,11 @@ For testing you can run as below, but it is recommended to create a systemd serv
 
 Defaults are port 9100 and local dir for logs
 
+Other flags - 
+
+```-uri``` the libvirt URI to connect to -  default - "qemu:///system"
+```-path``` the scrape target path  - default - "/metrics"
+
 ### Code Mechanics
 
 For each active instance in a libvirt Domain the code launches a new goroutine calling libvirt Go binding to the libvirt C library
