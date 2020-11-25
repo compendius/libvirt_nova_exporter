@@ -336,6 +336,8 @@ func main() {
 	// get listening port and logfile dir
 	promPort := flag.String("port", "9100", "Port to listen on")
 	logPath := flag.String("log", "./libvirt_nova.log", "path to log file")
+	connectURI := flag.String("uri", "qemu:///system", "libvirt connect uri")
+	scrapePath := flag.String("path", "/metrics", "path to expose metrics")
 	flag.Parse()
 	// set up logging
 
@@ -348,7 +350,7 @@ func main() {
 
 	// connect to libvirt
 
-	conn, err := libvirt.NewConnectReadOnly("qemu:///system")
+	conn, err := libvirt.NewConnectReadOnly(*connectURI)
 	if err != nil {
 		err = Wrap(err, "NewConnectReadOnly")
 		log.Fatal(err)
@@ -361,6 +363,6 @@ func main() {
 	go recordMetrics(conn, file)
 	// set up prometheus http service
 
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle(*scrapePath, promhttp.Handler())
 	log.Fatal(http.ListenAndServe(":"+*promPort, nil))
 }
