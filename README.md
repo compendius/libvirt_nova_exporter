@@ -26,10 +26,12 @@ For testing you can run as below, but it is recommended to create a systemd serv
 
 Defaults are port 9100 and local dir for logs
 
-Other flags - 
+Flags - 
 
  * ```-uri``` the libvirt URI to connect to -  default - "qemu:///system"
  * ```-path``` the scrape target path  - default - "/metrics"
+ * ```-port``` port to listen on  - default - "9100"
+ * ```-log``` log file path  - default - "working directory"
 
 ### Code Mechanics
 
