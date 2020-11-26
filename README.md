@@ -34,9 +34,9 @@ Options -
 ### Code Mechanics
 
 For each active instance in a libvirt Domain the code launches a new goroutine calling libvirt Go binding to the libvirt C library
-to get metrics. This promotes good concurrency. Each API call for each metric has error trapping in a dedicated error channel which should appear in the log file.
+to get metrics. Each API call for each metric has error trapping in a dedicated error channel which should appear in the log file.
 Log files over 3MB will be truncated leaving most recent output.
-When an instance is removed from Nova (and therefore libvirt) the code removes removes the related metric for that instance.
+When an instance is removed from Nova (and therefore libvirt) the code removes the related metric for that instance.
 The code polls for metrics every second.
 
 ### Metrics
