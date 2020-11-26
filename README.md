@@ -81,3 +81,17 @@ whilst the Domain is in the process of state change. These errors are for inform
 ```
 2020/11/24 12:24:20 instance-000002bc : MemoryStats from getStats goroutine: virError(Code=55, Domain=20, Message='Requested operation is not valid: domain is not running')
 ``` 
+### Running in a Container
+
+Sometimes it may be convenient to run in a container listening to libvirt on the host
+
+For example on port 9201
+
+```
+cd docker
+docker build --tag golibvirtdocker:1.0 .
+docker run --rm -d  --network host \ 
+-v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro \
+-v "$(pwd)":/var/log/ \
+golibvirtdocker  -log /var/log/libvirt_nova.log -port 9201
+```
