@@ -24,9 +24,7 @@ For testing you can run as below, but it is recommended to create a systemd serv
 
 ```libvirt_nova -port 9200 -log /var/log/libvirt_nova.log &```
 
-Defaults are port 9100 and local dir for logs
-
-Flags - 
+Options - 
 
  * ```-uri``` the libvirt URI to connect to -  default - ```qemu:///system```
  * ```-path``` the scrape target path  - default - ```/metrics```
