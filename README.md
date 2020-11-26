@@ -28,10 +28,10 @@ Defaults are port 9100 and local dir for logs
 
 Flags - 
 
- * ```-uri``` the libvirt URI to connect to -  default - "qemu:///system"
- * ```-path``` the scrape target path  - default - "/metrics"
- * ```-port``` port to listen on  - default - "9100"
- * ```-log``` log file path  - default - "working directory"
+ * ```-uri``` the libvirt URI to connect to -  default - ```qemu:///system```
+ * ```-path``` the scrape target path  - default - ```/metrics```
+ * ```-port``` port to listen on  - default - ```9100```
+ * ```-log``` log file path  - default - working directory
 
 ### Code Mechanics
 
