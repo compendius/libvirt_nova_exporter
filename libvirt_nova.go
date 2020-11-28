@@ -189,8 +189,8 @@ func (collecting *metricsCollector) Collect(ch chan<- prometheus.Metric) {
 	// check for errors and log
 	for e := range errchan {
 		errs := Wrap(e.Err, e.Context)
-		go fileCheck()
 		log.Println(errs)
+		fileCheck()
 	}
 	for i := range out {
 		ch <- prometheus.MustNewConstMetric(collecting.cpuUsage, prometheus.CounterValue, i.CpuTime, i.NovaName, i.LibVirtName, i.NovaProject)
