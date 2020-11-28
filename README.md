@@ -47,16 +47,14 @@ golibvirtdocker  -log /var/log/libvirt_nova.log -port 9201
 ```
 ### Code Mechanics
 
+The code creates a custom collector and uses the Collect method (defined in the Collector interface) to get the metrics from libvirt. 
 For each active instance in a libvirt Domain the code launches a new goroutine calling libvirt Go binding to the libvirt C library
 to get metrics. Each API call for each metric has error trapping in a dedicated error channel which should appear in the log file.
 Log files over 3MB will be truncated leaving most recent output.
-When an instance is removed from Nova (and therefore libvirt) the code removes the related metric for that instance.
-The code polls for metrics every second.
+When an instance is removed from Nova (and therefore libvirt) the custom Collector removes the related metric for that instance.
 
 ### Metrics
 
-Note that metric ```libvirt_nova_instance_cpu_time_total``` is a counter not a gauge. This means it will work properly with PromQL rate() and irate() 
-which takes into account counter resets.
 
 ```
 # HELP libvirt_nova_instance_cpu_time_total instance vcpu time

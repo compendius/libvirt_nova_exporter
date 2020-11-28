@@ -1,5 +1,6 @@
 // Written by Charles Short
-// 17/11/2020
+// 17/11/2020  - first
+// 18/11/2020  - updated to use a custom collector interface
 // A libvirt prometheus backend providing metrics for Openstack Nova instances
 //THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 //IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,8 +24,12 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
 )
+
+// globals
+
+var file *os.File
+var connectURI *string
 
 // structure for label values
 type LabelVal struct {
@@ -70,151 +75,130 @@ type CustomError struct {
 	Err     error
 }
 
-// set up prometheus variables
+// set up structure for prometheus descriptors
 
-var (
-	cpuUsage = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "libvirt_nova_instance_cpu_time_total",
-		Help: "instance vcpu time",
-	},
-		[]string{"novaname", "libvirtname", "novaproject"},
-	)
-	memUsage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "libvirt_nova_instance_memory_used_kb",
-		Help: "instance memory used",
-	},
-		[]string{"novaname", "libvirtname", "novaproject"},
-	)
-	cpuNum = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "libvirt_nova_instance_vcpu_count",
-		Help: "instance vcpu allocated",
-	},
-		[]string{"novaname", "libvirtname", "novaproject"},
-	)
-	memAlloc = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "libvirt_nova_instance_memory_alloc_kb",
-		Help: "instance memory allocated",
-	},
-		[]string{"novaname", "libvirtname", "novaproject"},
-	)
-)
+type metricsCollector struct {
+	cpuUsage *prometheus.Desc
+	memUsage *prometheus.Desc
+	cpuNum   *prometheus.Desc
+	memAlloc *prometheus.Desc
+}
 
-func recordMetrics(conn *libvirt.Connect, file *os.File) {
+// truncate large error logs
 
-	var cpucounter float64
-	cpuhist := make(map[LabelVal]float64)
-
-	for {
-
-		// get all active domains
-		doms, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
-		//doms, err := conn.ListAllDomains()
+func fileCheck() {
+	f, err := file.Stat()
+	if err != nil {
+		fmt.Println("cannot read log file")
+		os.Exit(0)
+	}
+	if f.Size() > 2000000 {
+		_, err := file.Seek(0, 0)
 		if err != nil {
-			err = Wrap(err, "ListAllDomains")
-			log.Fatal(err)
+			fmt.Println("cannot read log file")
+			os.Exit(0)
+		}
+		err = file.Truncate(2000000)
+		if err != nil {
+			fmt.Println("cannot read log file")
+			os.Exit(0)
+		}
+		_, err = file.Seek(0, 2)
+		if err != nil {
+			fmt.Println("cannot read log file")
+			os.Exit(0)
 		}
 
-		// set up channel with Result and CustonError structure
-		out := make(chan Result, len(doms))
-		errchan := make(chan CustomError, (len(doms) * 8))
-		// temp map for cpu stats
-		cpuhisttemp := make(map[LabelVal]float64)
+		errs := Wrap(err, "Too Many Errors, truncated")
+		log.Println(errs)
+	}
 
-		// set up waitgroup so we wait for all goroutines
-		// for all domains to finish before getting data
-		var wg sync.WaitGroup
-		// parallel goroutines called to get cpu and
-		// memory stats for each domain. Pass it a slice of all domains
-		for _, dom := range doms {
-			wg.Add(1)
-			dom := dom
-			go getStats(dom, out, &wg, errchan)
-		}
+}
 
-		wg.Wait()
-		close(out)
-		close(errchan)
-		// check for errors and log
+// initialise descriptors
 
-		for e := range errchan {
-			errs := Wrap(e.Err, e.Context)
-			log.Println(errs)
-			// manage large log file and truncate
-			// from top if too large
-			f, err := file.Stat()
-			if err != nil {
-				fmt.Println("cannot read log file")
-				os.Exit(0)
-			}
-			if f.Size() > 2000000 {
-				_, err := file.Seek(0, 0)
-				if err != nil {
-					fmt.Println("cannot read log file")
-					os.Exit(0)
-				}
-				err = file.Truncate(2000000)
-				if err != nil {
-					fmt.Println("cannot read log file")
-					os.Exit(0)
-				}
-				_, err = file.Seek(0, 2)
-				if err != nil {
-					fmt.Println("cannot read log file")
-					os.Exit(0)
-				}
-
-				errs = Wrap(err, "Too Many Errors, truncated")
-				log.Println(errs)
-			}
-		}
-		// looks at return channel struct and build metrics
-		for i := range out {
-			// set up cpu seconds map for incremental comparison with previous metric.
-			// Prometheus counters must start at 0 and go up
-			// so this works out the difference and there are only Inc()
-			// and Add() methods. Counter manages resets
-			// https://godoc.org/github.com/prometheus/client_golang/prometheus#Counter
-			promLab := LabelVal{NovaName: i.NovaName, LibVirtName: i.LibVirtName, NovaProject: i.NovaProject}
-
-			if _, ok := cpuhist[promLab]; ok {
-				cpucounter = (i.CpuTime - cpuhist[promLab])
-			} else {
-				cpucounter = 0
-
-			}
-			cpuhisttemp[promLab] = i.CpuTime
-
-			cpuUsage.WithLabelValues(i.NovaName, i.LibVirtName, i.NovaProject).Add(cpucounter)
-			cpuNum.WithLabelValues(i.NovaName, i.LibVirtName, i.NovaProject).Set(i.CpuNumber)
-			memUsage.WithLabelValues(i.NovaName, i.LibVirtName, i.NovaProject).Set(i.UsedMemory)
-			memAlloc.WithLabelValues(i.NovaName, i.LibVirtName, i.NovaProject).Set(i.AvailMemory)
-		}
-
-		//remove instances and clear temp map
-		for k, _ := range cpuhist {
-			if _, ok := cpuhisttemp[k]; ok {
-				continue
-			} else {
-
-				cpuUsage.DeleteLabelValues(k.NovaName, k.LibVirtName, k.NovaProject)
-				memUsage.DeleteLabelValues(k.NovaName, k.LibVirtName, k.NovaProject)
-				memAlloc.DeleteLabelValues(k.NovaName, k.LibVirtName, k.NovaProject)
-				cpuNum.DeleteLabelValues(k.NovaName, k.LibVirtName, k.NovaProject)
-
-			}
-		}
-		cpuhist = cpuhisttemp
-
-		// a one second delay between metric samples
-
-		time.Sleep(time.Second)
-
+func newMetricsCollector() *metricsCollector {
+	return &metricsCollector{
+		cpuUsage: prometheus.NewDesc(
+			"libvirt_nova_instance_cpu_time_total",
+			"instance vcpu time",
+			[]string{"novaname", "libvirtname", "novaproject"}, nil,
+		),
+		memUsage: prometheus.NewDesc(
+			"libvirt_nova_instance_memory_used_kb",
+			"instance memory used",
+			[]string{"novaname", "libvirtname", "novaproject"}, nil,
+		),
+		cpuNum: prometheus.NewDesc(
+			"libvirt_nova_instance_vcpu_count",
+			"instance vcpu allocated",
+			[]string{"novaname", "libvirtname", "novaproject"}, nil,
+		),
+		memAlloc: prometheus.NewDesc(
+			"libvirt_nova_instance_memory_alloc_kb",
+			"instance memory allocated",
+			[]string{"novaname", "libvirtname", "novaproject"}, nil,
+		),
 	}
 }
 
-//test error generation
-func doRequest() error {
-	return errors.New("this is a test error")
+// As per in Collector interface there is a describe method
+// https://godoc.org/github.com/prometheus/client_golang/prometheus#Collector
+
+func (collecting *metricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	prometheus.DescribeByCollect(collecting, ch)
+}
+
+// Collect method as per Collector interface. Here we populate the metrics with numbers
+
+func (collecting *metricsCollector) Collect(ch chan<- prometheus.Metric) {
+
+	conn, err := libvirt.NewConnectReadOnly(*connectURI)
+	if err != nil {
+		err = Wrap(err, "NewConnectReadOnly")
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	// get all active domains
+	doms, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
+	//doms, err := conn.ListAllDomains()
+	if err != nil {
+		err = Wrap(err, "ListAllDomains")
+		log.Fatal(err)
+	}
+
+	// set up channel with Result and CustonError structure
+	out := make(chan Result, len(doms))
+	errchan := make(chan CustomError, (len(doms) * 8))
+
+	// set up waitgroup so we wait for all goroutines
+	// for all domains to finish before getting data
+	var wg sync.WaitGroup
+	// parallel goroutines called to get cpu and
+	// memory stats for each domain. Pass it a slice of all domains
+	for _, dom := range doms {
+		wg.Add(1)
+		dom := dom
+		go getStats(dom, out, &wg, errchan)
+	}
+
+	wg.Wait()
+	close(out)
+	close(errchan)
+	// check for errors and log
+	for e := range errchan {
+		errs := Wrap(e.Err, e.Context)
+		go fileCheck()
+		log.Println(errs)
+	}
+	for i := range out {
+		ch <- prometheus.MustNewConstMetric(collecting.cpuUsage, prometheus.CounterValue, i.CpuTime, i.NovaName, i.LibVirtName, i.NovaProject)
+		ch <- prometheus.MustNewConstMetric(collecting.memUsage, prometheus.GaugeValue, i.UsedMemory, i.NovaName, i.LibVirtName, i.NovaProject)
+		ch <- prometheus.MustNewConstMetric(collecting.cpuNum, prometheus.GaugeValue, i.CpuNumber, i.NovaName, i.LibVirtName, i.NovaProject)
+		ch <- prometheus.MustNewConstMetric(collecting.memAlloc, prometheus.GaugeValue, i.AvailMemory, i.NovaName, i.LibVirtName, i.NovaProject)
+	}
+
 }
 
 // goroutine launched in parallel to get metrics
@@ -308,6 +292,11 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 
 }
 
+//test error generation
+func doRequest() error {
+	return errors.New("this is a test error")
+}
+
 // custom error output using the error interface
 func (w *CustomError) Error() string {
 	return fmt.Sprintf("%s: %v", w.Context, w.Err)
@@ -321,46 +310,30 @@ func Wrap(err error, info string) *CustomError {
 	}
 }
 
-func init() {
-	// Metrics have to be registered to be exposed:
-	//	reg := prometheus.NewRegistry()
-	//	prometheus.MustRegister(cpuTemp)
-	prometheus.MustRegister(cpuUsage)
-	prometheus.MustRegister(memUsage)
-	prometheus.MustRegister(cpuNum)
-	prometheus.MustRegister(memAlloc)
-}
-
 func main() {
 
 	// get listening port and logfile dir
 	promPort := flag.String("port", "9100", "Port to listen on")
 	logPath := flag.String("log", "./libvirt_nova.log", "path to log file")
-	connectURI := flag.String("uri", "qemu:///system", "libvirt connect uri")
+	connectURI = flag.String("uri", "qemu:///system", "libvirt connect uri")
 	scrapePath := flag.String("path", "/metrics", "path to expose metrics")
 	flag.Parse()
 	// set up logging
 
-	file, err := os.OpenFile(*logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	fileNew, err := os.OpenFile(*logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
-	log.SetOutput(file)
+	defer fileNew.Close()
+	log.SetOutput(fileNew)
+	file = fileNew
 
-	// connect to libvirt
-
-	conn, err := libvirt.NewConnectReadOnly(*connectURI)
-	if err != nil {
-		err = Wrap(err, "NewConnectReadOnly")
-		log.Fatal(err)
-	}
-	defer conn.Close()
 	fmt.Println("Prometheus libvirt exporter for Openstack Nova")
 	log.Print("Started successfully")
-	// record metrics
 
-	go recordMetrics(conn, file)
+	// record metrics
+	foo := newMetricsCollector()
+	prometheus.MustRegister(foo)
 	// set up prometheus http service
 
 	http.Handle(*scrapePath, promhttp.Handler())
