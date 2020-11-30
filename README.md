@@ -78,7 +78,9 @@ libvirt_nova_instance_vcpu_count{libvirtname="instance-00000038",novaname="testi
 ### PromQL examples
 #### How many vCPUs in use
 
-```irate(libvirt_nova_instance_cpu_time_total{novaname=~"testing.*"}[1m])/1e+9```
+note that ```[15s]``` is this case ```scrape_interval``` defined in the Prometheus serevr config file
+
+```irate(libvirt_nova_instance_cpu_time_total{novaname=~"testing.*"}[15s])/1e+9```
 
 "irate()
 irate(v range-vector) calculates the per-second instant rate of increase of the time series in the range vector. This is based on the last two data points"
@@ -87,7 +89,7 @@ irate(v range-vector) calculates the per-second instant rate of increase of the 
 
 ### Errors
 
-Errors are logged when instances are removed from being 'active' in libvirt (deleted/shutdown etc). This is a natural consequence of calling a function on a libvirt domain
+Errors are somtimes logged when instances are removed from being 'active' in libvirt (deleted/shutdown etc) whilst the Collect() method is called. This is a natural consequence of calling a function on a libvirt domain
 whilst the Domain is in the process of state change. These errors are for information only and include the relevant domain name. The relevant goroutine is terminated if errors like these are detected.
 
 ```

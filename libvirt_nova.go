@@ -146,7 +146,12 @@ func newMetricsCollector() *metricsCollector {
 // https://godoc.org/github.com/prometheus/client_golang/prometheus#Collector
 
 func (collecting *metricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	prometheus.DescribeByCollect(collecting, ch)
+
+	//	prometheus.DescribeByCollect(collecting, ch)
+	ch <- collecting.cpuUsage
+	ch <- collecting.memUsage
+	ch <- collecting.cpuNum
+	ch <- collecting.memAlloc
 }
 
 // Collect method as per Collector interface. Here we populate the metrics with numbers
