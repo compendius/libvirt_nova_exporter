@@ -2,7 +2,7 @@
 Prometheus libvirt exporter for Openstack Nova instances
 
 
-### Whats is this?
+### What is this?
 
 This is some code I have written in Go that aims to export a very small subset of metrics from libvirt for Openstack Nova instances.
 The principal is to get real time usage information, for example how many vcpus are in use.
