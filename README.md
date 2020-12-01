@@ -81,7 +81,7 @@ libvirt_nova_instance_vcpu_count{libvirtname="instance-00000038",novaname="testi
 
 ```irate(libvirt_nova_instance_cpu_time_total{novaname=~"testing.*"}[30s])/1e+9```
 
-Note that 15s in this case ```scrape_interval``` defined in the Prometheus server config file,  
+Note that the ```scrape interval``` is 15s in this case defined in the Prometheus server config file,  
 so here irate is effectively calculating the delta between two 15 second cpu time scrapes which should give you the vCPUs in use
 
 [https://prometheus.io/docs/prometheus/latest/querying/functions/](https://prometheus.io/docs/prometheus/latest/querying/functions/)
