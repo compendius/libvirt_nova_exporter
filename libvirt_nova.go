@@ -61,6 +61,7 @@ type Result struct {
 	CpuTime     float64
 	CpuNumber   float64
 	UsedMemory  float64
+        UsedMemoryCache float64
 	AvailMemory float64
 	NovaName    string
 	LibVirtName string
@@ -80,6 +81,7 @@ type CustomError struct {
 type metricsCollector struct {
 	cpuUsage *prometheus.Desc
 	memUsage *prometheus.Desc
+	memUsageCache *prometheus.Desc
 	cpuNum   *prometheus.Desc
 	memAlloc *prometheus.Desc
 }
@@ -126,7 +128,12 @@ func newMetricsCollector() *metricsCollector {
 		),
 		memUsage: prometheus.NewDesc(
 			"libvirt_nova_instance_memory_used_kb",
-			"instance memory used",
+			"instance memory used without buffers/cache",
+			[]string{"novaname", "libvirtname", "novaproject"}, nil,
+		),
+		memUsageCache: prometheus.NewDesc(
+			"libvirt_nova_instance_memory_cache_used_kb",
+			"instance memory used including buffers/cache",
 			[]string{"novaname", "libvirtname", "novaproject"}, nil,
 		),
 		cpuNum: prometheus.NewDesc(
@@ -150,6 +157,7 @@ func (collecting *metricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	//	prometheus.DescribeByCollect(collecting, ch)
 	ch <- collecting.cpuUsage
 	ch <- collecting.memUsage
+	ch <- collecting.memUsageCache
 	ch <- collecting.cpuNum
 	ch <- collecting.memAlloc
 }
@@ -200,6 +208,7 @@ func (collecting *metricsCollector) Collect(ch chan<- prometheus.Metric) {
 	for i := range out {
 		ch <- prometheus.MustNewConstMetric(collecting.cpuUsage, prometheus.CounterValue, i.CpuTime, i.NovaName, i.LibVirtName, i.NovaProject)
 		ch <- prometheus.MustNewConstMetric(collecting.memUsage, prometheus.GaugeValue, i.UsedMemory, i.NovaName, i.LibVirtName, i.NovaProject)
+		ch <- prometheus.MustNewConstMetric(collecting.memUsageCache, prometheus.GaugeValue, i.UsedMemoryCache, i.NovaName, i.LibVirtName, i.NovaProject)
 		ch <- prometheus.MustNewConstMetric(collecting.cpuNum, prometheus.GaugeValue, i.CpuNumber, i.NovaName, i.LibVirtName, i.NovaProject)
 		ch <- prometheus.MustNewConstMetric(collecting.memAlloc, prometheus.GaugeValue, i.AvailMemory, i.NovaName, i.LibVirtName, i.NovaProject)
 	}
@@ -213,7 +222,7 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	var vcput uint64
 	var availablemem uint64
 	var unusedmem uint64
-	var usedmem uint64
+	var usablemem uint64
 	errcount := 0
 
 	// for wait group to inform when all goroutines done
@@ -248,8 +257,23 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 		errcount++
 	}
 	// get domain memory used
+	// from virDomainMemoryStatTags https://libvirt.org/html/libvirt-libvirt-domain.html
+
+	// The total amount of usable memory as seen by the domain. This value 
+	// may be less than the amount of memory assigned to the domain if a 
+	// balloon driver is in use or if the guest OS does not initialize all assigned pages. 
+	// This value is expressed in kB.
 	mema := libvirt.DOMAIN_MEMORY_STAT_AVAILABLE
+
+	// How much the balloon can be inflated without pushing the guest 
+	// system to swap, corresponds to 'Available' in /proc/meminfo
+
 	memu := libvirt.DOMAIN_MEMORY_STAT_USABLE
+	// The amount of memory left completely unused by the system. 
+	// Memory that is available but used for reclaimable caches 
+	// should NOT be reported as free. This value is expressed in kB.
+	memud := libvirt.DOMAIN_MEMORY_STAT_UNUSED
+
 	memory, err := dom.MemoryStats(12, 0)
 	if err == nil {
 
@@ -259,6 +283,10 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 			}
 
 			if data.Tag == int32(memu) {
+				usablemem = data.Val
+			}
+
+			if data.Tag == int32(memud) {
 				unusedmem = data.Val
 			}
 
@@ -267,7 +295,8 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 		errchan <- CustomError{Err: err, Context: domName + " : MemoryStats from getStats goroutine"}
 		errcount++
 	}
-	usedmem = (availablemem - unusedmem)
+	usednocache := (availablemem - usablemem)
+	usedaddcache := (availablemem - unusedmem)
 	//get domain xml nova descriptions
 	xmldoc, err := dom.GetXMLDesc(0)
 	m := &Domain{}
@@ -289,7 +318,7 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	if errcount == 0 {
 		// populate Result structure and pass back to channel
 
-		out <- Result{NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usedmem)}
+		out <- Result{NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
 	} else {
 		errchan <- CustomError{Err: err, Context: domName + " : Many errors from getStats goroutine so skipping this iteration"}
 		out <- Result{}

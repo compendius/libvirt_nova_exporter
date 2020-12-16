@@ -59,20 +59,19 @@ When an instance is removed from Nova (and therefore libvirt) the custom Collect
 ```
 # HELP libvirt_nova_instance_cpu_time_total instance vcpu time
 # TYPE libvirt_nova_instance_cpu_time_total counter
-libvirt_nova_instance_cpu_time_total{libvirtname="instance-00000037",novaname="testing-2",novaproject="admin"} 1.7676361e+07
-libvirt_nova_instance_cpu_time_total{libvirtname="instance-00000038",novaname="testing-1",novaproject="admin"} 2.7172637e+07
+libvirt_nova_instance_cpu_time_total{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 2.57646967433e+12
 # HELP libvirt_nova_instance_memory_alloc_kb instance memory allocated
 # TYPE libvirt_nova_instance_memory_alloc_kb gauge
-libvirt_nova_instance_memory_alloc_kb{libvirtname="instance-00000037",novaname="testing-2",novaproject="admin"} 489084
-libvirt_nova_instance_memory_alloc_kb{libvirtname="instance-00000038",novaname="testing-1",novaproject="admin"} 489084
-# HELP libvirt_nova_instance_memory_used_kb instance memory used
+libvirt_nova_instance_memory_alloc_kb{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 489084
+# HELP libvirt_nova_instance_memory_cache_used_kb instance memory used including buffers/cache
+# TYPE libvirt_nova_instance_memory_cache_used_kb gauge
+libvirt_nova_instance_memory_cache_used_kb{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 48980
+# HELP libvirt_nova_instance_memory_used_kb instance memory used without buffers/cache
 # TYPE libvirt_nova_instance_memory_used_kb gauge
-libvirt_nova_instance_memory_used_kb{libvirtname="instance-00000037",novaname="testing-2",novaproject="admin"} 29492
-libvirt_nova_instance_memory_used_kb{libvirtname="instance-00000038",novaname="testing-1",novaproject="admin"} 29444
+libvirt_nova_instance_memory_used_kb{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 29436
 # HELP libvirt_nova_instance_vcpu_count instance vcpu allocated
 # TYPE libvirt_nova_instance_vcpu_count gauge
-libvirt_nova_instance_vcpu_count{libvirtname="instance-00000037",novaname="testing-2",novaproject="admin"} 1
-libvirt_nova_instance_vcpu_count{libvirtname="instance-00000038",novaname="testing-1",novaproject="admin"} 1
+libvirt_nova_instance_vcpu_count{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 1
 ```
 
 ### PromQL examples
