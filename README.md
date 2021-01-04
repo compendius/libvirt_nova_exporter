@@ -6,7 +6,7 @@ Prometheus libvirt exporter for Openstack Nova instances
 
 This is some code I have written in Go that aims to export a very small subset of metrics from libvirt for Openstack Nova instances.
 The principal is to get real time usage information, for example how many vcpus are in use.
-
+If you prefer Python I have also written a version in Python here [https://github.com/compendius/libvirt_nova_exporter_py](https://github.com/compendius/libvirt_nova_exporter_py)
 
 ### Build
 
