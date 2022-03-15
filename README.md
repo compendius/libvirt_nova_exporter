@@ -13,18 +13,11 @@ If you prefer Python I have also written a version in Python here [https://githu
 To build the code on Linux you there is a Docker file to create an image which has the libvirt dependencies required.
 
 ```
-docker build --tag golibvirt:1.0 .
-./buildme.sh 
+docker build --tag golibvirt:1.0 . 
 ```
- I have provided a binary that should work on Linux
 
-### Run
 
-For testing you can run as below, but it is recommended to create a systemd service or a container
-
-```libvirt_nova -port 9200 -log /var/log/libvirt_nova.log &```
-
-Options - 
+### Options  
 
  * ```-uri``` the libvirt URI to connect to -  default - ```qemu:///system```
  * ```-path``` the scrape target path  - default - ```/metrics```
@@ -33,17 +26,14 @@ Options -
 
 #### Running in a Container
 
-Sometimes it may be convenient to run in a container listening to libvirt on the host
-
 For example on port 9201
 
 ```
-cd docker
-docker build --tag golibvirtdocker:1.0 .
+docker build --tag golibvirt:1.0 .
 docker run --rm -d  --network host \ 
 -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro \
 -v "$(pwd)":/var/log/ \
-golibvirtdocker  -log /var/log/libvirt_nova.log -port 9201
+golibvirt  -log /var/log/libvirt_nova.log -port 9201
 ```
 ### Code Mechanics
 
@@ -72,6 +62,14 @@ libvirt_nova_instance_memory_used_kb{libvirtname="instance-0000030f",novaname="c
 # HELP libvirt_nova_instance_vcpu_count instance vcpu allocated
 # TYPE libvirt_nova_instance_vcpu_count gauge
 libvirt_nova_instance_vcpu_count{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 1
+# HELP libvirt_nova_instance_rxbytes instance rxbytes
+# TYPE libvirt_nova_instance_rxbytes counter
+libvirt_nova_instance_rxbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems
+-testing-0",novaproject="admin"} 95561
+# HELP libvirt_nova_instance_txbytes instance txbytes
+# TYPE libvirt_nova_instance_txbytes counter
+libvirt_nova_instance_txbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems
+-testing-0",novaproject="admin"} 0
 ```
 
 ### PromQL examples

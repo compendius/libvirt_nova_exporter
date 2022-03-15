@@ -45,6 +45,7 @@ type Domain struct {
 	Type     string   `xml:"type,attr"`
 	Name     string   `xml:"name"`
 	Instance Instance `xml:"metadata"`
+	Devices Devices `xml:"devices"`
 }
 
 type Instance struct {
@@ -54,6 +55,31 @@ type Instance struct {
 type Owner struct {
 	Project string `xml:"project"`
 }
+
+type Devices struct {
+	Interfaces []Interface `xml:"interface"`
+}
+
+type Interface struct {
+	Target      TargetDev      `xml:"target"`
+	Mac         MacAddress      `xml:"mac"`
+}
+
+
+
+type TargetDev struct {
+	Dev string `xml:"dev,attr"`
+}
+
+type MacAddress struct {
+	Mac string `xml:"address,attr"`
+}
+
+type IntStats struct {
+	InBytes  int64
+	OutBytes int64
+	MacAddr string
+        }
 
 // structure for channel return to use for metrics and tags
 
@@ -67,6 +93,7 @@ type Result struct {
 	LibVirtName string
 	NovaProject string
 	DomError    error
+	Nics        map[string]IntStats
 }
 
 // define error structure for channel return and errors for the custom error interface implementation
@@ -84,6 +111,8 @@ type metricsCollector struct {
 	memUsageCache *prometheus.Desc
 	cpuNum   *prometheus.Desc
 	memAlloc *prometheus.Desc
+	txBytes *prometheus.Desc
+	rxBytes *prometheus.Desc
 }
 
 // truncate large error logs
@@ -146,6 +175,16 @@ func newMetricsCollector() *metricsCollector {
 			"instance memory allocated",
 			[]string{"novaname", "libvirtname", "novaproject"}, nil,
 		),
+		rxBytes: prometheus.NewDesc(
+			"libvirt_nova_instance_rxbytes",
+			"instance rxbytes",
+			[]string{"novaname", "libvirtname", "novaproject","iface","macaddr"}, nil,
+		),
+		txBytes: prometheus.NewDesc(
+			"libvirt_nova_instance_txbytes",
+			"instance txbytes",
+			[]string{"novaname", "libvirtname", "novaproject","iface","macaddr"}, nil,
+		),
 	}
 }
 
@@ -160,6 +199,8 @@ func (collecting *metricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- collecting.memUsageCache
 	ch <- collecting.cpuNum
 	ch <- collecting.memAlloc
+	ch <- collecting.rxBytes
+	ch <- collecting.txBytes
 }
 
 // Collect method as per Collector interface. Here we populate the metrics with numbers
@@ -211,10 +252,15 @@ func (collecting *metricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(collecting.memUsageCache, prometheus.GaugeValue, i.UsedMemoryCache, i.NovaName, i.LibVirtName, i.NovaProject)
 		ch <- prometheus.MustNewConstMetric(collecting.cpuNum, prometheus.GaugeValue, i.CpuNumber, i.NovaName, i.LibVirtName, i.NovaProject)
 		ch <- prometheus.MustNewConstMetric(collecting.memAlloc, prometheus.GaugeValue, i.AvailMemory, i.NovaName, i.LibVirtName, i.NovaProject)
+		for key, value := range i.Nics {
+			rx:=float64(value.InBytes)
+			tx:=float64(value.OutBytes)
+		      ch <- prometheus.MustNewConstMetric(collecting.rxBytes, prometheus.CounterValue, rx, i.NovaName, i.LibVirtName, i.NovaProject, key,value.MacAddr)
+		      ch <- prometheus.MustNewConstMetric(collecting.txBytes, prometheus.CounterValue, tx, i.NovaName, i.LibVirtName, i.NovaProject, key,value.MacAddr)
 	}
 
 }
-
+}
 // goroutine launched in parallel to get metrics
 
 func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan chan<- CustomError) {
@@ -310,6 +356,24 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	// e.g. if a Go method returns a '* Domain' struct, it is
 	// neccessary to call 'Free' on this when no longer required."
 	// https://godoc.org/github.com/libvirt/libvirt-go
+
+	//Getting Interface stats
+        nics := make(map[string]IntStats,10)
+	for _, net := range m.Devices.Interfaces {
+		ifaces, err:=dom.InterfaceStats(net.Target.Dev)
+	        if err == nil {
+                  var  rx,tx int64
+		  switch {
+		  case ifaces.RxBytesSet:
+		     rx = ifaces.RxBytes
+		  case ifaces.TxBytesSet:
+		     tx = ifaces.TxBytes
+	        }
+		  nics[net.Target.Dev]= makeNicStats(rx,tx,net.Mac.Mac)
+                } else {errchan <- CustomError{Err: err, Context: domName + " : InterfaceStats from getStats goroutine"}
+		errcount++}
+   }
+
 	err = dom.Free()
 	if err != nil {
 		errchan <- CustomError{Err: err, Context: domName + " : DomFree from getStats goroutine"}
@@ -318,7 +382,7 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	if errcount == 0 {
 		// populate Result structure and pass back to channel
 
-		out <- Result{NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
+		out <- Result{Nics:nics, NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
 	} else {
 		errchan <- CustomError{Err: err, Context: domName + " : Many errors from getStats goroutine so skipping this iteration"}
 		out <- Result{}
@@ -326,6 +390,13 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 
 }
 
+func makeNicStats(rx int64, tx int64, mac string) IntStats {
+    return IntStats{
+       InBytes : rx,
+       OutBytes : tx,
+       MacAddr: mac,
+    }
+}
 //test error generation
 func doRequest() error {
 	return errors.New("this is a test error")

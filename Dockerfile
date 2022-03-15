@@ -1,24 +1,17 @@
-FROM alpine:3.8
+FROM golang:1.17.3-alpine3.15 AS build
 
-RUN apk add ca-certificates g++ git go libnl-dev linux-headers make perl pkgconf libtirpc-dev wget
+ENV LIBVIRT_NOVA=/libvirt_nova
 
-RUN update-ca-certificates
-RUN wget ftp://xmlsoft.org/libxml2/libxml2-2.9.4.tar.gz -P /tmp && \
-    tar -xf /tmp/libxml2-2.9.4.tar.gz -C /tmp
-WORKDIR /tmp/libxml2-2.9.4
-RUN ./configure --disable-shared --enable-static && \
-    make -j2 && \
-    make install
-RUN wget https://libvirt.org/sources/libvirt-3.2.0.tar.xz -P /tmp && \
-    tar -xf /tmp/libvirt-3.2.0.tar.xz -C /tmp
-WORKDIR /tmp/libvirt-3.2.0
-RUN ./configure --disable-shared --enable-static --localstatedir=/var --without-storage-mpath && \
-    make -j2 && \
-    make install && \
-    sed -i 's/^Libs:.*/& -lnl -ltirpc -lxml2/' /usr/local/lib/pkgconfig/libvirt.pc
+RUN apk add ca-certificates g++ git libvirt-dev libvirt
+WORKDIR $LIBVIRT_NOVA
+COPY . .
+RUN go env -w  GO111MODULE=auto
+RUN go get -d ./...
+RUN go build
 
+FROM alpine:3.15
+RUN apk add ca-certificates libvirt
+COPY --from=build $LIBVIRT_NOVA/libvirt_nova /
+EXPOSE 9200
 
-
-
-
-
+ENTRYPOINT [ "/libvirt_nova" ]
