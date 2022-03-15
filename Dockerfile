@@ -12,6 +12,5 @@ RUN go build
 FROM alpine:3.15
 RUN apk add ca-certificates libvirt
 COPY --from=build $LIBVIRT_NOVA/libvirt_nova /
-EXPOSE 9200
 
 ENTRYPOINT [ "/libvirt_nova" ]
