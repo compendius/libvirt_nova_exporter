@@ -45,7 +45,7 @@ type Domain struct {
 	Type     string   `xml:"type,attr"`
 	Name     string   `xml:"name"`
 	Instance Instance `xml:"metadata"`
-	Devices Devices `xml:"devices"`
+	Devices  Devices  `xml:"devices"`
 }
 
 type Instance struct {
@@ -61,11 +61,9 @@ type Devices struct {
 }
 
 type Interface struct {
-	Target      TargetDev      `xml:"target"`
-	Mac         MacAddress      `xml:"mac"`
+	Target TargetDev  `xml:"target"`
+	Mac    MacAddress `xml:"mac"`
 }
-
-
 
 type TargetDev struct {
 	Dev string `xml:"dev,attr"`
@@ -78,22 +76,22 @@ type MacAddress struct {
 type IntStats struct {
 	InBytes  int64
 	OutBytes int64
-	MacAddr string
-        }
+	MacAddr  string
+}
 
 // structure for channel return to use for metrics and tags
 
 type Result struct {
-	CpuTime     float64
-	CpuNumber   float64
-	UsedMemory  float64
-        UsedMemoryCache float64
-	AvailMemory float64
-	NovaName    string
-	LibVirtName string
-	NovaProject string
-	DomError    error
-	Nics        map[string]IntStats
+	CpuTime         float64
+	CpuNumber       float64
+	UsedMemory      float64
+	UsedMemoryCache float64
+	AvailMemory     float64
+	NovaName        string
+	LibVirtName     string
+	NovaProject     string
+	DomError        error
+	Nics            map[string]IntStats
 }
 
 // define error structure for channel return and errors for the custom error interface implementation
@@ -106,13 +104,13 @@ type CustomError struct {
 // set up structure for prometheus descriptors
 
 type metricsCollector struct {
-	cpuUsage *prometheus.Desc
-	memUsage *prometheus.Desc
+	cpuUsage      *prometheus.Desc
+	memUsage      *prometheus.Desc
 	memUsageCache *prometheus.Desc
-	cpuNum   *prometheus.Desc
-	memAlloc *prometheus.Desc
-	txBytes *prometheus.Desc
-	rxBytes *prometheus.Desc
+	cpuNum        *prometheus.Desc
+	memAlloc      *prometheus.Desc
+	txBytes       *prometheus.Desc
+	rxBytes       *prometheus.Desc
 }
 
 // truncate large error logs
@@ -178,12 +176,12 @@ func newMetricsCollector() *metricsCollector {
 		rxBytes: prometheus.NewDesc(
 			"libvirt_nova_instance_rxbytes",
 			"instance rxbytes",
-			[]string{"novaname", "libvirtname", "novaproject","iface","macaddr"}, nil,
+			[]string{"novaname", "libvirtname", "novaproject", "iface", "macaddr"}, nil,
 		),
 		txBytes: prometheus.NewDesc(
 			"libvirt_nova_instance_txbytes",
 			"instance txbytes",
-			[]string{"novaname", "libvirtname", "novaproject","iface","macaddr"}, nil,
+			[]string{"novaname", "libvirtname", "novaproject", "iface", "macaddr"}, nil,
 		),
 	}
 }
@@ -253,14 +251,15 @@ func (collecting *metricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(collecting.cpuNum, prometheus.GaugeValue, i.CpuNumber, i.NovaName, i.LibVirtName, i.NovaProject)
 		ch <- prometheus.MustNewConstMetric(collecting.memAlloc, prometheus.GaugeValue, i.AvailMemory, i.NovaName, i.LibVirtName, i.NovaProject)
 		for key, value := range i.Nics {
-			rx:=float64(value.InBytes)
-			tx:=float64(value.OutBytes)
-		      ch <- prometheus.MustNewConstMetric(collecting.rxBytes, prometheus.CounterValue, rx, i.NovaName, i.LibVirtName, i.NovaProject, key,value.MacAddr)
-		      ch <- prometheus.MustNewConstMetric(collecting.txBytes, prometheus.CounterValue, tx, i.NovaName, i.LibVirtName, i.NovaProject, key,value.MacAddr)
-	}
+			rx := float64(value.InBytes)
+			tx := float64(value.OutBytes)
+			ch <- prometheus.MustNewConstMetric(collecting.rxBytes, prometheus.CounterValue, rx, i.NovaName, i.LibVirtName, i.NovaProject, key, value.MacAddr)
+			ch <- prometheus.MustNewConstMetric(collecting.txBytes, prometheus.CounterValue, tx, i.NovaName, i.LibVirtName, i.NovaProject, key, value.MacAddr)
+		}
 
+	}
 }
-}
+
 // goroutine launched in parallel to get metrics
 
 func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan chan<- CustomError) {
@@ -305,18 +304,18 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	// get domain memory used
 	// from virDomainMemoryStatTags https://libvirt.org/html/libvirt-libvirt-domain.html
 
-	// The total amount of usable memory as seen by the domain. This value 
-	// may be less than the amount of memory assigned to the domain if a 
-	// balloon driver is in use or if the guest OS does not initialize all assigned pages. 
+	// The total amount of usable memory as seen by the domain. This value
+	// may be less than the amount of memory assigned to the domain if a
+	// balloon driver is in use or if the guest OS does not initialize all assigned pages.
 	// This value is expressed in kB.
 	mema := libvirt.DOMAIN_MEMORY_STAT_AVAILABLE
 
-	// How much the balloon can be inflated without pushing the guest 
+	// How much the balloon can be inflated without pushing the guest
 	// system to swap, corresponds to 'Available' in /proc/meminfo
 
 	memu := libvirt.DOMAIN_MEMORY_STAT_USABLE
-	// The amount of memory left completely unused by the system. 
-	// Memory that is available but used for reclaimable caches 
+	// The amount of memory left completely unused by the system.
+	// Memory that is available but used for reclaimable caches
 	// should NOT be reported as free. This value is expressed in kB.
 	memud := libvirt.DOMAIN_MEMORY_STAT_UNUSED
 
@@ -358,21 +357,24 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	// https://godoc.org/github.com/libvirt/libvirt-go
 
 	//Getting Interface stats
-        nics := make(map[string]IntStats,10)
+	nics := make(map[string]IntStats, 10)
 	for _, net := range m.Devices.Interfaces {
-		ifaces, err:=dom.InterfaceStats(net.Target.Dev)
-	        if err == nil {
-                  var  rx,tx int64
-		  switch {
-		  case ifaces.RxBytesSet:
-		     rx = ifaces.RxBytes
-		  case ifaces.TxBytesSet:
-		     tx = ifaces.TxBytes
-	        }
-		  nics[net.Target.Dev]= makeNicStats(rx,tx,net.Mac.Mac)
-                } else {errchan <- CustomError{Err: err, Context: domName + " : InterfaceStats from getStats goroutine"}
-		errcount++}
-   }
+		ifaces, err := dom.InterfaceStats(net.Target.Dev)
+		if err == nil {
+			var rx, tx int64
+			switch {
+			case ifaces.RxBytesSet:
+				rx = ifaces.RxBytes
+				fallthrough
+			case ifaces.TxBytesSet:
+				tx = ifaces.TxBytes
+			}
+			nics[net.Target.Dev] = makeNicStats(rx, tx, net.Mac.Mac)
+		} else {
+			errchan <- CustomError{Err: err, Context: domName + " : InterfaceStats from getStats goroutine"}
+			errcount++
+		}
+	}
 
 	err = dom.Free()
 	if err != nil {
@@ -382,7 +384,7 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	if errcount == 0 {
 		// populate Result structure and pass back to channel
 
-		out <- Result{Nics:nics, NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
+		out <- Result{Nics: nics, NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
 	} else {
 		errchan <- CustomError{Err: err, Context: domName + " : Many errors from getStats goroutine so skipping this iteration"}
 		out <- Result{}
@@ -391,12 +393,13 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 }
 
 func makeNicStats(rx int64, tx int64, mac string) IntStats {
-    return IntStats{
-       InBytes : rx,
-       OutBytes : tx,
-       MacAddr: mac,
-    }
+	return IntStats{
+		InBytes:  rx,
+		OutBytes: tx,
+		MacAddr:  mac,
+	}
 }
+
 //test error generation
 func doRequest() error {
 	return errors.New("this is a test error")
