@@ -70,6 +70,19 @@ libvirt_nova_instance_rxbytes{iface="tap29b6117f-cf",libvirtname="instance-00000
 # TYPE libvirt_nova_instance_txbytes counter
 libvirt_nova_instance_txbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems
 -testing-0",novaproject="admin"} 0
+# HELP libvirt_nova_instance_wrreq instance write requests
+# TYPE libvirt_nova_instance_wrreq counter
+libvirt_nova_instance_wrreq{cindervolume="0f4dbb48-363d-45a3-96b4-b4569c04330e",disktype="block",libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin",targetdev="vdb"} 0
+# HELP libvirt_nova_instance_wrbytes instance write bytes
+# TYPE libvirt_nova_instance_wrbytes counter
+libvirt_nova_instance_wrbytes{cindervolume="0f4dbb48-363d-45a3-96b4-b4569c04330e",disktype="block",libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin",targetdev="vdb"} 0
+# HELP libvirt_nova_instance_rdbytes instance read bytes
+# TYPE libvirt_nova_instance_rdbytes counter
+libvirt_nova_instance_rdbytes{cindervolume="0f4dbb48-363d-45a3-96b4-b4569c04330e",disktype="block",libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin",targetdev="vdb"} 12288
+# HELP libvirt_nova_instance_rdreq instance read requests
+# TYPE libvirt_nova_instance_rdreq counter
+libvirt_nova_instance_rdreq{cindervolume="0f4dbb48-363d-45a3-96b4-b4569c04330e",disktype="block",libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin",targetdev="vdb"} 3
+
 ```
 
 ### PromQL examples
@@ -78,6 +91,7 @@ libvirt_nova_instance_txbytes{iface="tap29b6117f-cf",libvirtname="instance-00000
 
 ```irate(libvirt_nova_instance_cpu_time_total{novaname=~"testing.*"}[30s])/1e+9```
 
+EXPOSE 9200
 Note that the ```scrape interval``` is 15s in this case defined in the Prometheus server config file,  
 so here irate is effectively calculating the delta between two 15 second cpu time scrapes which should give you the vCPUs in use
 

@@ -57,7 +57,18 @@ type Owner struct {
 }
 
 type Devices struct {
+	Disks      []Disk      `xml:"disk"`
 	Interfaces []Interface `xml:"interface"`
+}
+
+type Disk struct {
+	DType  string  `xml:"type,attr"`
+	Serial string  `xml:"serial"`
+	Target DTarget `xml:"target"`
+}
+
+type DTarget struct {
+	Dev string `xml:"dev,attr"`
 }
 
 type Interface struct {
@@ -78,6 +89,14 @@ type IntStats struct {
 	OutBytes int64
 	MacAddr  string
 }
+type DevStats struct {
+	RdBytes int64
+	WrBytes int64
+	RdReq   int64
+	WrReq   int64
+	Serial  string
+	DType   string
+}
 
 // structure for channel return to use for metrics and tags
 
@@ -92,6 +111,7 @@ type Result struct {
 	NovaProject     string
 	DomError        error
 	Nics            map[string]IntStats
+	Devs            map[string]DevStats
 }
 
 // define error structure for channel return and errors for the custom error interface implementation
@@ -111,6 +131,10 @@ type metricsCollector struct {
 	memAlloc      *prometheus.Desc
 	txBytes       *prometheus.Desc
 	rxBytes       *prometheus.Desc
+	rdBytes       *prometheus.Desc
+	wrBytes       *prometheus.Desc
+	rdReq         *prometheus.Desc
+	wrReq         *prometheus.Desc
 }
 
 // truncate large error logs
@@ -182,6 +206,26 @@ func newMetricsCollector() *metricsCollector {
 			"libvirt_nova_instance_txbytes",
 			"instance txbytes",
 			[]string{"novaname", "libvirtname", "novaproject", "iface", "macaddr"}, nil,
+		),
+		rdBytes: prometheus.NewDesc(
+			"libvirt_nova_instance_rdbytes",
+			"instance read bytes",
+			[]string{"novaname", "libvirtname", "novaproject", "targetdev", "cindervolume", "disktype"}, nil,
+		),
+		wrBytes: prometheus.NewDesc(
+			"libvirt_nova_instance_wrbytes",
+			"instance write bytes",
+			[]string{"novaname", "libvirtname", "novaproject", "targetdev", "cindervolume", "disktype"}, nil,
+		),
+		rdReq: prometheus.NewDesc(
+			"libvirt_nova_instance_rdreq",
+			"instance read requests",
+			[]string{"novaname", "libvirtname", "novaproject", "targetdev", "cindervolume", "disktype"}, nil,
+		),
+		wrReq: prometheus.NewDesc(
+			"libvirt_nova_instance_wrreq",
+			"instance write requests",
+			[]string{"novaname", "libvirtname", "novaproject", "targetdev", "cindervolume", "disktype"}, nil,
 		),
 	}
 }
@@ -255,6 +299,12 @@ func (collecting *metricsCollector) Collect(ch chan<- prometheus.Metric) {
 			tx := float64(value.OutBytes)
 			ch <- prometheus.MustNewConstMetric(collecting.rxBytes, prometheus.CounterValue, rx, i.NovaName, i.LibVirtName, i.NovaProject, key, value.MacAddr)
 			ch <- prometheus.MustNewConstMetric(collecting.txBytes, prometheus.CounterValue, tx, i.NovaName, i.LibVirtName, i.NovaProject, key, value.MacAddr)
+		}
+		for key, value := range i.Devs {
+			ch <- prometheus.MustNewConstMetric(collecting.rdBytes, prometheus.CounterValue, float64(value.RdBytes), i.NovaName, i.LibVirtName, i.NovaProject, key, value.Serial, value.DType)
+			ch <- prometheus.MustNewConstMetric(collecting.wrBytes, prometheus.CounterValue, float64(value.WrBytes), i.NovaName, i.LibVirtName, i.NovaProject, key, value.Serial, value.DType)
+			ch <- prometheus.MustNewConstMetric(collecting.rdReq, prometheus.CounterValue, float64(value.RdReq), i.NovaName, i.LibVirtName, i.NovaProject, key, value.Serial, value.DType)
+			ch <- prometheus.MustNewConstMetric(collecting.wrReq, prometheus.CounterValue, float64(value.WrReq), i.NovaName, i.LibVirtName, i.NovaProject, key, value.Serial, value.DType)
 		}
 
 	}
@@ -358,6 +408,7 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 
 	//Getting Interface stats
 	nics := make(map[string]IntStats, 10)
+	devst := make(map[string]DevStats, 10)
 	for _, net := range m.Devices.Interfaces {
 		ifaces, err := dom.InterfaceStats(net.Target.Dev)
 		if err == nil {
@@ -375,6 +426,30 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 			errcount++
 		}
 	}
+	// Getting block device stats
+	for _, devs := range m.Devices.Disks {
+		bdevs, err := dom.BlockStats(devs.Target.Dev)
+		if err == nil {
+			var rb, wb, rr, wr int64
+			switch {
+			case bdevs.RdBytesSet:
+				rb = bdevs.RdBytes
+				fallthrough
+			case bdevs.WrBytesSet:
+				wb = bdevs.WrBytes
+				fallthrough
+			case bdevs.RdReqSet:
+				rr = bdevs.RdReq
+				fallthrough
+			case bdevs.WrReqSet:
+				wr = bdevs.WrReq
+			}
+			devst[devs.Target.Dev] = makeDevStats(rb, wb, rr, wr, devs.Serial, devs.DType)
+		} else {
+			errchan <- CustomError{Err: err, Context: domName + " : DevStats from getStats goroutine"}
+			errcount++
+		}
+	}
 
 	err = dom.Free()
 	if err != nil {
@@ -384,7 +459,7 @@ func getStats(dom libvirt.Domain, out chan<- Result, wg *sync.WaitGroup, errchan
 	if errcount == 0 {
 		// populate Result structure and pass back to channel
 
-		out <- Result{Nics: nics, NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
+		out <- Result{Devs: devst, Nics: nics, NovaName: m.Instance.Name, NovaProject: m.Instance.Owner.Project, LibVirtName: m.Name, CpuNumber: float64(ncpu), CpuTime: float64(vcput), AvailMemory: float64(availablemem), UsedMemory: float64(usednocache), UsedMemoryCache: float64(usedaddcache)}
 	} else {
 		errchan <- CustomError{Err: err, Context: domName + " : Many errors from getStats goroutine so skipping this iteration"}
 		out <- Result{}
@@ -397,6 +472,17 @@ func makeNicStats(rx int64, tx int64, mac string) IntStats {
 		InBytes:  rx,
 		OutBytes: tx,
 		MacAddr:  mac,
+	}
+}
+
+func makeDevStats(rb int64, wb int64, rr int64, wr int64, serial string, dtype string) DevStats {
+	return DevStats{
+		RdBytes: rb,
+		WrBytes: wb,
+		RdReq:   rr,
+		WrReq:   wr,
+		Serial:  serial,
+		DType:   dtype,
 	}
 }
 
