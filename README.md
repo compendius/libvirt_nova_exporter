@@ -64,12 +64,10 @@ libvirt_nova_instance_memory_used_kb{libvirtname="instance-0000030f",novaname="c
 libvirt_nova_instance_vcpu_count{libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin"} 1
 # HELP libvirt_nova_instance_rxbytes instance rxbytes
 # TYPE libvirt_nova_instance_rxbytes counter
-libvirt_nova_instance_rxbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems
--testing-0",novaproject="admin"} 95561
+libvirt_nova_instance_rxbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems-testing-0",novaproject="admin"} 95561
 # HELP libvirt_nova_instance_txbytes instance txbytes
 # TYPE libvirt_nova_instance_txbytes counter
-libvirt_nova_instance_txbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems
--testing-0",novaproject="admin"} 0
+libvirt_nova_instance_txbytes{iface="tap29b6117f-cf",libvirtname="instance-0000030f",macaddr="fa:16:3e:50:93:ec",novaname="cems-testing-0",novaproject="admin"} 0
 # HELP libvirt_nova_instance_wrreq instance write requests
 # TYPE libvirt_nova_instance_wrreq counter
 libvirt_nova_instance_wrreq{cindervolume="0f4dbb48-363d-45a3-96b4-b4569c04330e",disktype="block",libvirtname="instance-0000030f",novaname="cems-testing-0",novaproject="admin",targetdev="vdb"} 0
