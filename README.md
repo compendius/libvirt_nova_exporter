@@ -1,4 +1,4 @@
-# Libvirt Nova Exporter
+# Libvirt Nova Exporter !!!! Please note this is no longer maintained. Deprecated
 Prometheus libvirt exporter for Openstack Nova instances
 
 
